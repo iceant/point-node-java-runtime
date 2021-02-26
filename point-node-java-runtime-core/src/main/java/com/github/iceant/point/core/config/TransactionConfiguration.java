@@ -26,8 +26,8 @@ import java.util.Map;
 @EnableTransactionManagement
 public class TransactionConfiguration {
 
-    @Value("${spring.transaction.default-timeout}")
-    private int TX_METHOD_TIMEOUT=360;
+    @Value("${spring.transaction.default-timeout:360}")
+    private int TX_METHOD_TIMEOUT;
 
     private static final String AOP_POINTCUT_EXPRESSION = "(execution(* *..*.service..*.*(..)) || execution(* *..*.services..*.*(..)))";
 
