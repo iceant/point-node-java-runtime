@@ -33,6 +33,7 @@ public class WebPartController {
         args.put("request", request);
         args.put("response", response);
         args.put("util", new AppUtil());
+        args.put("ctxPath", request.getContextPath());
         for(String part : requestPartNames){
             WebPart webPart = webPartLoader.load(part, args);
             webPartList.add(webPart);

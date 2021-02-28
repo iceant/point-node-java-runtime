@@ -1,6 +1,5 @@
 package com.github.iceant.point.core.webpart;
 
-import com.github.iceant.point.core.utils.IoUtil;
 import org.beetl.core.Configuration;
 import org.beetl.core.GroupTemplate;
 import org.beetl.core.ResourceLoader;
