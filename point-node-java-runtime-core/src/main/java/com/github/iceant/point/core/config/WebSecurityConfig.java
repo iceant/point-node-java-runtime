@@ -1,8 +1,14 @@
 package com.github.iceant.point.core.config;
 
+import com.github.iceant.point.core.security.RestAuthenticationDetailsSource;
+import com.github.iceant.point.core.security.RestAuthenticationFailureHandler;
+import com.github.iceant.point.core.security.RestAuthenticationProvider;
+import com.github.iceant.point.core.security.RestAuthenticationSuccessHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.builders.WebSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -20,13 +26,19 @@ import javax.sql.DataSource;
 @Configuration
 @EnableWebSecurity
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
+    final DataSource dataSource;
     @Value("${app.security.remember_me_token:point-node-java-runtime-rememberme}")
     private String rememberMeToken;
 
-    final DataSource dataSource;
-
     public WebSecurityConfig(DataSource dataSource) {
         this.dataSource = dataSource;
+    }
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth
+                .authenticationProvider(daoAuthenticationProvider())
+                .authenticationProvider(restAuthenticationProvider());
     }
 
     @Override
@@ -38,7 +50,14 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
                 .anyRequest().authenticated()
                 .and()
                 .formLogin()
-                .loginPage("/pages/login").permitAll()
+                    .authenticationDetailsSource(restAuthenticationDetailsSource())
+                    .loginProcessingUrl("/login")
+                    .successHandler(new RestAuthenticationSuccessHandler())
+                    .failureHandler(new RestAuthenticationFailureHandler())
+                    .loginPage("/pages/login").permitAll()
+                .and()
+                .logout()
+                    .logoutUrl("/logout").logoutSuccessUrl("/").invalidateHttpSession(true)
         ;
 
         http.rememberMe()
@@ -50,7 +69,6 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
         http.sessionManagement()
                 .maximumSessions(1)
         ;
-
     }
 
     @Override
@@ -62,24 +80,24 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
     ////////////////////////////////////////////////////////////////////////////////
     ////
     @Bean
-    public PasswordEncoder passwordEncoder(){
+    public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
     @Bean
-    public UserDetailsService userDetailsService(){
+    public UserDetailsService userDetailsService() {
         PasswordEncoder passwordEncoder = passwordEncoder();
-        String password = passwordEncoder.encode("password");
+        String password = passwordEncoder.encode("pwd@123");
 
         JdbcUserDetailsManager userDetailsManager = new JdbcUserDetailsManager();
         userDetailsManager.setEnableAuthorities(true);
         userDetailsManager.setEnableGroups(true);
         userDetailsManager.setDataSource(dataSource);
-        if(!userDetailsManager.userExists("user")){
+        if (!userDetailsManager.userExists("user")) {
             userDetailsManager.createUser(User.withUsername("user").password(password)
                     .roles("USER").build());
         }
-        if(!userDetailsManager.userExists("admin")){
+        if (!userDetailsManager.userExists("admin")) {
             userDetailsManager.createUser(User.withUsername("admin").password(password)
                     .roles("USER", "ADMIN").build());
         }
@@ -90,9 +108,30 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
     //// remember me
 
     @Bean
-    public PersistentTokenRepository persistentTokenRepository(){
+    public PersistentTokenRepository persistentTokenRepository() {
         JdbcTokenRepositoryImpl tokenRepository = new JdbcTokenRepositoryImpl();
         tokenRepository.setDataSource(dataSource);
         return tokenRepository;
     }
+
+    ////////////////////////////////////////////////////////////////////////////////
+    ////
+    @Bean
+    DaoAuthenticationProvider daoAuthenticationProvider() {
+        DaoAuthenticationProvider daoAuthenticationProvider = new DaoAuthenticationProvider();
+        daoAuthenticationProvider.setPasswordEncoder(passwordEncoder());
+        daoAuthenticationProvider.setUserDetailsService(userDetailsService());
+        return daoAuthenticationProvider;
+    }
+
+    @Bean
+    RestAuthenticationProvider restAuthenticationProvider(){
+        return new RestAuthenticationProvider(userDetailsService(), passwordEncoder());
+    }
+
+    @Bean
+    RestAuthenticationDetailsSource restAuthenticationDetailsSource(){
+        return new RestAuthenticationDetailsSource();
+    }
+
 }

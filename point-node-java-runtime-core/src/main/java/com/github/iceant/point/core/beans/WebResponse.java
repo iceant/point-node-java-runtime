@@ -11,6 +11,21 @@ public class WebResponse<T> {
         return new WebResponse<>();
     }
 
+    public static <T> WebResponse<T> success() {
+        return new WebResponse<T>().setCode(1).setMessage("success");
+    }
+
+    public static <T> WebResponse<T> fail() {
+        return new WebResponse<T>().setCode(-1).setMessage("fail");
+    }
+
+    public static <T> WebResponse<T> success(int code, String msg) {
+        return new WebResponse<T>().setCode(code).setMessage(msg);
+    }
+
+    public static <T> WebResponse<T> fail(int code, String msg) {
+        return new WebResponse<T>().setCode(code).setMessage(msg);
+    }
     ////////////////////////////////////////////////////////////////////////////////
     ////
 

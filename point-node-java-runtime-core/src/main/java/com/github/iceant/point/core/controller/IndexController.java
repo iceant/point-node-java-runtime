@@ -1,13 +1,15 @@
-package com.github.iceant.point.core.pages;
+package com.github.iceant.point.core.controller;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.ModelAndView;
 
+import javax.servlet.http.HttpServletRequest;
+
 @Controller
 public class IndexController {
     @RequestMapping(path = {"","/index", "/home", "/"})
-    public ModelAndView index(){
+    public ModelAndView index(HttpServletRequest req){
         return new ModelAndView("pages/index.html");
     }
 
@@ -15,4 +17,5 @@ public class IndexController {
     public ModelAndView login(){
         return new ModelAndView("pages/login.html");
     }
+
 }

@@ -1,5 +1,30 @@
 (function(window, document, $){
-    var cookie = {
+    var Util={
+        throttle:function(fn,interval){
+            var __self = fn, timer, firstTime = true;
+            return function () {
+                var args = arguments, __me = this;
+                if ( firstTime ) {
+                    __self.apply(__me, args);
+                    return firstTime = false;
+                }
+                if ( timer ) {
+                    return false;
+                }
+                timer = setTimeout(function(){
+                    clearTimeout(timer);
+                    timer = null;
+                    __self.apply(__me, args);
+                }, interval || 500 );
+            };
+        },
+        uid:function(len){
+            len = len||9;
+            return '_' + Math.random().toString(36).substr(2, len);
+        }
+    };
+
+    var Cookie = {
         write:function(key, value, duration){
             var d = new Date();
             d.setTime(d.getTime()+1000*60*60*24*30);
@@ -14,16 +39,19 @@
         }
     };
 
-    var storage = {
+    var Storage = {
         get:function(k){
-            return window.localStorage?localStorage.getItem(k):cookie.read(k);
+            return window.localStorage?localStorage.getItem(k):Cookie.read(k);
         },
         set:function(k,v){
             if(window.localStorage){
                 localStorage.setItem(k,v);
             }else{
-                cookie.write(k,v);
+                Cookie.write(k,v);
             }
+        },
+        decodeGet:function(k){
+            return decodeURIComponent(this.get(k));
         }
     };
 
@@ -90,52 +118,6 @@
                     return this.apply(_self, args);
                 });
             };
-
-            _extend = (function () {
-                var isObjFunc = function (name) {
-                    var toString = Object.prototype.toString;
-                    return function () {
-                        return toString.call(arguments[0]) === '[object ' + name + ']';
-                    }
-                };
-                var isObject = isObjFunc('Object'),
-                    isArray = isObjFunc('Array'),
-                    isBoolean = isObjFunc('Boolean');
-                return function extend() {
-                    var index = 0, isDeep = false, obj, copy, destination, source, i;
-                    if (isBoolean(arguments[0])) {
-                        index = 1;
-                        isDeep = arguments[0]
-                    }
-                    for (i = arguments.length - 1; i > index; i--) {
-                        destination = arguments[i - 1];
-                        source = arguments[i];
-                        if (isObject(source) || isArray(source)) {
-                            for (var property in source) {
-                                obj = source[property];
-                                if (isDeep && (isObject(obj) || isArray(obj))) {
-                                    copy = isObject(obj) ? {} : [];
-                                    var extended = extend(isDeep, copy, obj);
-                                    destination[property] = extended;
-                                } else {
-                                    destination[property] = source[property];
-                                }
-                            }
-                        } else {
-                            destination = source;
-                        }
-                    }
-                    return destination;
-                }
-            })();
-
-            _uniqueId = function (len) {
-                len = len || 9;
-                return "_" + (Number(String(Math.random()).slice(2)) +
-                    Date.now() +
-                    Math.round(performance.now())).toString(36).substr(2, len);
-            };
-
             _create = function (namespace) {
                 var namespace = namespace || _default;
                 var cache = {},
@@ -210,12 +192,7 @@
                 trigger: function () {
                     var event = this.create();
                     event.trigger.apply(this, arguments);
-                },
-                extend: function () {
-                    var event = this.create();
-                    return event.extend.apply(event, arguments);
-                },
-                id: _uniqueId
+                }
             };
         }();
         return Event;
@@ -224,6 +201,7 @@
     var Router=(function(){
         return {
             routes: [],
+            params:{},
             mode: null,
             root: '/',
             config: function(options) {
@@ -245,14 +223,15 @@
                 return this.clearSlashes(fragment);
             },
             clearSlashes: function(path) {
-                return path.toString().replace(/\/$/, '').replace(/^\//, '');
+                return path.toString().replace(/\/$/, '');
             },
             add: function(re, handler) {
-                if(typeof re == 'function') {
+                if(typeof re === 'function') {
                     handler = re;
                     re = '';
                 }
-                this.routes.push({ re: re, handler: handler});
+                var m = '^' + re.replace(/(:\w+)/g, '([^/]+)') + '$';
+                this.routes.push({ re: m, handler: handler, p:re});
                 return this;
             },
             remove: function(param) {
@@ -266,17 +245,39 @@
             },
             flush: function() {
                 this.routes = [];
+                this.params={};
                 this.mode = null;
                 this.root = '/';
                 return this;
             },
+            pathVariables:function(route, url) {
+                var routeParts = route.split('/');
+                var urlParts = url.split('/');
+                var args = {};
+                for (var i = 0, nbOfParts = routeParts.length; i < nbOfParts; i++) {
+                    if (urlParts[i] && ~routeParts[i].indexOf(':')) {
+                        args[routeParts[i].slice(1)] = urlParts[i];
+                    }
+                }
+                return args;
+            },
+            queryString: function (name) {
+                var reg = new RegExp('(^|&)' + name + '=([^&]*)(&|$)', 'i');
+                var r = window.location.search.substr(1).match(reg);
+                if (r != null) {
+                    return unescape(r[2]);
+                }
+                return null;
+            },
             check: function(f) {
                 var fragment = f || this.getFragment();
                 for(var i=0; i < this.routes.length; i++) {
-                    var match = fragment.match(this.routes[i].re);
-                    if(match) {
-                        match.shift();
-                        this.routes[i].handler.apply({}, match);
+                    var m = fragment.match(this.routes[i].re);
+                    if(m) {
+                        m.shift();
+                        var args = this.pathVariables(this.routes[i].p, fragment);
+                        args = $.extend({}, args, this.params[fragment]);
+                        this.routes[i].handler.call(this, args);
                         return this;
                     }
                 }
@@ -284,19 +285,21 @@
             },
             listen: function() {
                 var self = this;
-                var current = self.getFragment();
-                var fn = function() {
-                    if(current !== self.getFragment()) {
-                        current = self.getFragment();
-                        self.check(current);
-                    }
-                }
-                clearInterval(this.interval);
-                this.interval = setInterval(fn, 50);
+                window.addEventListener('hashchange', function(){
+                    self.check();
+                });
+                window.addEventListener('load', function(){
+                    self.check();
+                });
                 return this;
             },
             navigate: function(path) {
                 path = path ? path : '';
+                if(arguments.length>1){
+                    var params = Array.prototype.slice.call(arguments);
+                    params.shift();
+                    this.params[path]=params;
+                }
                 if(this.mode === 'history') {
                     history.pushState(null, null, this.root + this.clearSlashes(path));
                 } else {
@@ -308,9 +311,10 @@
     }());
 
     var App=function(){
-        this.storage = storage;
+        this.storage = Storage;
         this.event = Event;
         this.router = Router;
+        this.fn=Util;
     };
     window.$app = new App();
 }(window, document, jQuery));
