@@ -5,7 +5,10 @@ import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.security.access.PermissionEvaluator;
+import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -269,6 +272,27 @@ public class AppUtil implements ApplicationContextAware {
     public static String msg(String code, String defaultMessage, Object ... args){
         return applicationContext.getMessage(code, args, defaultMessage, LocaleContextHolder.getLocale());
     }
+    ////////////////////////////////////////////////////////////////////////////////
+    ////
+    public boolean hasRole(String role){
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        for(GrantedAuthority authority : authentication.getAuthorities()){
+            if(authority.getAuthority().equalsIgnoreCase(role)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean hasAnyRole(String ... roles){
+        for(String role : roles){
+            if(hasRole(role)){
+                return true;
+            }
+        }
+        return false;
+    }
+
 
     ////////////////////////////////////////////////////////////////////////////////
     ////

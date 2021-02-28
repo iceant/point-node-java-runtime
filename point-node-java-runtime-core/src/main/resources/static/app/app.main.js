@@ -288,9 +288,7 @@
                 window.addEventListener('hashchange', function(){
                     self.check();
                 });
-                window.addEventListener('load', function(){
-                    self.check();
-                });
+                self.check();
                 return this;
             },
             navigate: function(path) {
@@ -310,11 +308,124 @@
         };
     }());
 
+    var WebPart = (function(){
+        var self = this;
+        self.WebParts = {};
+
+        function load(name, cb){
+            $.get('/webpart/'+name).then(function(wps){
+                if(wps && wps.data && wps.data.length>0){
+                    wps.data.forEach(function(wp){
+                        if(wp.styles) {
+                            for (var i = 0; i < wp.styles.length; i++) {
+                                var wpi = wp.styles[i];
+                                wpi.add = function () {
+                                    addSheet(wp.name + "_" + this.path, this.content);
+                                };
+                                wpi.remove = function () {
+                                    removeSheet(wp.name + "_" + this.path);
+                                };
+                            }
+                        }
+                        if(wp.scripts) {
+                            for (var i = 0; i < wp.scripts.length; i++) {
+                                var wpi = wp.scripts[i];
+                                wpi.eval = function () {
+                                    var js=eval(this.content);
+                                    js.part=function(n){return wp.get(n);}
+                                    return js;
+                                }
+                            }
+                        }
+                        if(wp.htmls){
+                            wp.htmls.forEach(function(h){
+                                h.render=function(m){
+                                    return Mustache.render(this.content, m);
+                                }
+                            });
+                        }
+                        self.WebParts[wp.name]=wp;
+                    });
+                    if(typeof cb==='function'){cb();};
+                }
+            });
+        }
+
+        function addSheet(id, rules){
+            var sheet = document.createElement('style')
+            sheet.setAttribute("id", id);
+            sheet.innerHTML = rules;
+            document.head.appendChild(sheet);
+        }
+
+        function removeSheet(id){
+            var sheetToBeRemoved = document.getElementById(id);
+            if(sheetToBeRemoved) {
+                var sheetParent = sheetToBeRemoved.parentNode;
+                sheetParent.removeChild(sheetToBeRemoved);
+            }
+        }
+
+        function makeFindFn(part){
+            var wp = part;
+            return function(file){
+                if(file.endsWith(".js")){
+                    if(!wp.scripts) return null;
+                    for(var i=0; i<wp.scripts.length; i++){
+                        var wpi = wp.scripts[i];
+                        if(wpi.path===file){
+                            return wpi;
+                        }
+                    }
+                    return null;
+                }else if(file.endsWith(".html") || file.endsWith(".htm")){
+                    if(!wp.htmls) return null;
+                    for(var i=0; i<wp.htmls.length; i++){
+                        var wpi = wp.htmls[i];
+                        if(wpi.path===file){
+                            return wpi;
+                        }
+                    }
+                    return null;
+                }else if(file.endsWith(".css")){
+                    if(!wp.styles) return null;
+                    for(var i=0; i<wp.styles.length; i++){
+                        var wpi = wp.styles[i];
+                        if(wpi.path===file){
+                            return wpi;
+                        }
+                    }
+                    return null;
+                }
+            };
+        }
+
+        function get(part, file){
+            var wp =  self.WebParts[part];
+            if(!wp) return null;
+            wp.get=makeFindFn(wp);
+            if(wp.styles && wp.styles.length>0){
+                wp.styles.forEach(function(css){
+                    console.log(css);
+                    css.add();
+                });
+            }
+            if(!file) return wp;
+            return makeFindFn(wp)();
+        }
+
+        return {
+            load:load,
+            get:get,
+        };
+    }());
+
     var App=function(){
         this.storage = Storage;
         this.event = Event;
         this.router = Router;
         this.fn=Util;
+        this.webpart = WebPart;
     };
     window.$app = new App();
 }(window, document, jQuery));
